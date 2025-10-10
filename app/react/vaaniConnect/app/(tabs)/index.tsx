@@ -108,7 +108,7 @@ export default function App() {
             <ActivityIndicator color="#fff" />
           ) : (
             <Text style={styles.buttonText}>Translate</Text>
-          )}
+          )} 
         </TouchableOpacity>
 
         <TouchableOpacity
