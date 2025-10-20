@@ -3,15 +3,19 @@ import {
   SafeAreaView,
   View,
   Text,
-  TextInput,
   TouchableOpacity,
+  TextInput,
   StyleSheet,
+  ScrollView,
   ActivityIndicator,
   Alert,
-  ScrollView,
+  StatusBar,
+  Platform,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
 import * as Speech from "expo-speech";
+import * as Clipboard from "expo-clipboard";
+// Removed dynamic require and directly imported Clipboard
 
 type LanguageOption = {
   label: string;
@@ -28,21 +32,42 @@ const LANGUAGE_OPTIONS: LanguageOption[] = [
 ];
 
 export default function App() {
-  const [sourceLang, setSourceLang] = useState<string>("en");
-  const [targetLang, setTargetLang] = useState<string>("hi");
-  const [inputText, setInputText] = useState<string>("");
-  const [translatedText, setTranslatedText] = useState<string>("");
-  const [loading, setLoading] = useState<boolean>(false);
+  const [sourceLang, setSourceLang] = useState("en");
+  const [targetLang, setTargetLang] = useState("hi");
+  // Separate inputs for each speaker
+  const [speaker1Text, setSpeaker1Text] = useState("");
+  const [speaker2Text, setSpeaker2Text] = useState("");
+  // Conversation history: array of { speaker, text }
+  const [conversation, setConversation] = useState<Array<{ speaker: string; text: string }>>([]);
+  const [loading, setLoading] = useState(false);
 
-  const handleTranslate = async () => {
-    if (!inputText.trim()) {
-      Alert.alert("Enter text first");
+  const handleTranslateSpeaker1 = async () => {
+    if (!speaker1Text.trim()) {
+      Alert.alert("Enter text for Speaker 1 first");
       return;
     }
     setLoading(true);
     try {
-      // Placeholder translation
-      setTranslatedText(`(Pretend translation to ${targetLang})`);
+      // Placeholder translation from speaker1's language to speaker2's language
+      const translated = `(translation of "${speaker1Text}" to ${targetLang})`;
+      setConversation((prev) => [...prev, { speaker: "Speaker 1", text: translated }]);
+    } catch (err: any) {
+      Alert.alert("Translation error", err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleTranslateSpeaker2 = async () => {
+    if (!speaker2Text.trim()) {
+      Alert.alert("Enter text for Speaker 2 first");
+      return;
+    }
+    setLoading(true);
+    try {
+      // Placeholder translation from speaker2's language to speaker1's language
+      const translated = `(translation of "${speaker2Text}" to ${sourceLang})`;
+      setConversation((prev) => [...prev, { speaker: "Speaker 2", text: translated }]);
     } catch (err: any) {
       Alert.alert("Translation error", err.message);
     } finally {
@@ -61,67 +86,188 @@ export default function App() {
     Speech.speak(text, { language: lang });
   };
 
+  const handleCopyConversation = async () => {
+    if (conversation.length === 0) {
+      Alert.alert("Nothing to copy");
+      return;
+    }
+    const text = conversation.map((c) => `${c.speaker}: ${c.text}`).join("\n\n");
+    try {
+      if (Clipboard && (Clipboard as any).setStringAsync) {
+        await (Clipboard as any).setStringAsync(text);
+      } else if ((global as any).navigator && (global as any).navigator.clipboard && (global as any).navigator.clipboard.writeText) {
+        await (global as any).navigator.clipboard.writeText(text);
+      } else if ((global as any).Clipboard && (global as any).Clipboard.setString) {
+        (global as any).Clipboard.setString(text);
+      } else {
+        throw new Error("No clipboard available");
+      }
+      Alert.alert("Copied conversation to clipboard");
+    } catch (err: any) {
+      Alert.alert("Copy failed", err.message || String(err));
+    }
+  };
+
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={[
+        styles.container,
+        { paddingTop: Platform.OS === "android" ? StatusBar.currentHeight : 0 },
+      ]}
+    >
       <View style={styles.header}>
-        <Text style={styles.title}>Vaani Connect</Text>
-        <Text style={styles.subtitle}>Bridge for South Indian languages</Text>
+        <Text style={styles.headerText}>vaani connect</Text>
       </View>
 
-      <ScrollView contentContainerStyle={styles.content}>
-        <View style={styles.row}>
-          <Picker
-            selectedValue={sourceLang}
-            onValueChange={(value) => setSourceLang(value)}
-            style={styles.picker}
-          >
-            {LANGUAGE_OPTIONS.map((lang) => (
-              <Picker.Item key={lang.code} label={lang.label} value={lang.code} />
-            ))}
-          </Picker>
+      <ScrollView contentContainerStyle={styles.scrollContent}>
+        <View style={styles.speakersContainer}>
+          {/* Speaker 1 */}
+          <View style={[styles.speakerCard, { borderColor: "#3b82f6" }]}>
+            <Text style={styles.speakerTitle}>Speaker 1</Text>
+            <Text style={styles.label}>Language</Text>
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={sourceLang}
+                onValueChange={(value) => setSourceLang(value)}
+                style={styles.picker}
+                dropdownIconColor="#94a3b8"
+              >
+                {LANGUAGE_OPTIONS.map((lang) => (
+                  <Picker.Item
+                    key={lang.code}
+                    label={lang.label}
+                    value={lang.code}
+                    color={Platform.OS === "android" ? "#000" : "#fff"}
+                  />
+                ))}
+              </Picker>
+            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Type message..."
+              placeholderTextColor="#94a3b8"
+              value={speaker1Text}
+              onChangeText={setSpeaker1Text}
+              multiline
+            />
 
-          <TouchableOpacity style={styles.swapButton} onPress={handleSwap}>
+            {/* Speak button (moved above translate) */}
+            <TouchableOpacity
+              style={styles.speakButton}
+              onPress={() => speak(speaker1Text, sourceLang)}
+            >
+              <Text style={styles.speakText}>Speak ▶</Text>
+            </TouchableOpacity>
+
+            {/* Translate button */}
+            <TouchableOpacity
+              style={styles.translateButton}
+              onPress={handleTranslateSpeaker1}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.translateText}>Translate ▶</Text>
+              )}
+            </TouchableOpacity>
+
+            <Text style={styles.status}>Ready</Text>
+          </View>
+
+          {/* Swap icon */}
+          <TouchableOpacity style={styles.swapCircle} onPress={handleSwap}>
             <Text style={styles.swapText}>⇄</Text>
           </TouchableOpacity>
 
-          <Picker
-            selectedValue={targetLang}
-            onValueChange={(value) => setTargetLang(value)}
-            style={styles.picker}
-          >
-            {LANGUAGE_OPTIONS.map((lang) => (
-              <Picker.Item key={lang.code} label={lang.label} value={lang.code} />
-            ))}
-          </Picker>
+          {/* Speaker 2 */}
+          <View style={[styles.speakerCard, { borderColor: "#f59e0b" }]}>
+            <Text style={styles.speakerTitle}>Speaker 2</Text>
+            <Text style={styles.label}>Language</Text>
+            <View style={styles.pickerWrapper}>
+              <Picker
+                selectedValue={targetLang}
+                onValueChange={(value) => setTargetLang(value)}
+                style={styles.picker}
+                dropdownIconColor="#94a3b8"
+              >
+                {LANGUAGE_OPTIONS.map((lang) => (
+                  <Picker.Item
+                    key={lang.code}
+                    label={lang.label}
+                    value={lang.code}
+                    color={Platform.OS === "android" ? "#000" : "#fff"}
+                  />
+                ))}
+              </Picker>
+            </View>
+            <TextInput
+              style={styles.input}
+              placeholder="Type message..."
+              placeholderTextColor="#94a3b8"
+              value={speaker2Text}
+              onChangeText={setSpeaker2Text}
+              multiline
+            />
+
+            <TouchableOpacity
+              style={styles.speakButton}
+              onPress={() => speak(speaker2Text, targetLang)}
+            >
+              <Text style={styles.speakText}>Speak ▶</Text>
+            </TouchableOpacity>
+
+            {/* Translate button for Speaker 2 */}
+            <TouchableOpacity
+              style={styles.translateButton}
+              onPress={handleTranslateSpeaker2}
+            >
+              {loading ? (
+                <ActivityIndicator color="#fff" />
+              ) : (
+                <Text style={styles.translateText}>Translate ▶</Text>
+              )}
+            </TouchableOpacity>
+            <Text style={styles.status}>Ready</Text>
+          </View>
         </View>
 
-        <TextInput
-          style={styles.input}
-          placeholder="Type text here"
-          multiline
-          value={inputText}
-          onChangeText={setInputText}
-        />
-
-        <TouchableOpacity style={styles.button} onPress={handleTranslate}>
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>Translate</Text>
-          )} 
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.speakButton}
-          onPress={() => speak(translatedText, targetLang)}
-        >
-          <Text style={styles.buttonText}>Speak Translation</Text>
-        </TouchableOpacity>
-
-        <View style={styles.outputBox}>
-          <Text style={styles.outputText}>
-            {translatedText || "Translation will appear here"}
-          </Text>
+        {/* Conversation Area */}
+        <View style={styles.conversationContainer}>
+          <Text style={styles.conversationTitle}>Conversation</Text>
+          <View style={styles.conversationBox}>
+            {conversation.length === 0 ? (
+              <Text style={styles.placeholderText}>
+                Start a conversation by typing or speaking.
+              </Text>
+            ) : (
+              conversation.map((c, i) => {
+                const isSpeaker1 = c.speaker === "Speaker 1";
+                const color = isSpeaker1 ? "#3b82f6" : "#f59e0b";
+                const bubbleBg = isSpeaker1 ? "#3b82f633" : "#f59e0b33"; // translucent
+                return (
+                  <View
+                    key={i}
+                    style={{ marginBottom: 8, alignSelf: "flex-end", width: "100%" }}
+                  >
+                    <Text style={[styles.conversationSpeaker, { color }]}>
+                      {c.speaker}:
+                    </Text>
+                    <View style={[styles.conversationBubble, { backgroundColor: bubbleBg, borderColor: color }]}> 
+                      <Text style={styles.conversationEntry}>{c.text}</Text>
+                    </View>
+                  </View>
+                );
+              })
+            )}
+          </View>
+          <View style={styles.bottomButtons}>
+            <TouchableOpacity style={styles.swapButton} onPress={handleSwap}>
+              <Text style={styles.bottomButtonText}>⇄ Swap</Text>
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.copyButton} onPress={handleCopyConversation}>
+              <Text style={styles.bottomButtonText}>Copy</Text>
+            </TouchableOpacity>
+          </View>
         </View>
       </ScrollView>
     </SafeAreaView>
@@ -129,42 +275,136 @@ export default function App() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#f3f4f6" },
-  header: { backgroundColor: "#3b82f6", padding: 20 },
-  title: { color: "#fff", fontSize: 24, fontWeight: "bold" },
-  subtitle: { color: "#e0f2fe", marginTop: 4 },
-  content: { padding: 16 },
-  row: { flexDirection: "row", alignItems: "center", marginBottom: 12 },
-  picker: { flex: 1, backgroundColor: "#fff", borderRadius: 8 },
-  swapButton: {
-    padding: 8,
-    backgroundColor: "#2563eb",
-    marginHorizontal: 8,
-    borderRadius: 8,
+  container: { flex: 1, backgroundColor: "#0f172a" },
+  header: {
+    backgroundColor: "#0c4a6e",
+    padding: 16,
+    alignItems: "center",
   },
-  swapText: { color: "#fff", fontSize: 18 },
+  headerText: { color: "#fff", fontSize: 20, fontWeight: "700" },
+  scrollContent: { padding: 16 },
+  speakersContainer: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "flex-start",
+  },
+  speakerCard: {
+    flex: 1,
+    backgroundColor: "#1e293b",
+    padding: 16,
+    borderRadius: 12,
+    borderWidth: 2,
+    minHeight: 250,
+  },
+  speakerTitle: {
+    color: "#fff",
+    fontSize: 18,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  label: { color: "#cbd5e1", fontSize: 14, marginBottom: 4 },
+  pickerWrapper: {
+    backgroundColor: "#334155",
+    borderRadius: 8,
+    marginBottom: 12,
+  },
+  picker: {
+    color: "#fff",
+  },
   input: {
-    backgroundColor: "#fff",
+    backgroundColor: "#334155",
+    color: "#fff",
     borderRadius: 8,
-    padding: 12,
-    minHeight: 100,
+    padding: 10,
+    minHeight: 60,
     marginBottom: 10,
+    textAlignVertical: "top",
   },
-  button: {
-    backgroundColor: "#1f2937",
-    padding: 12,
+  translateButton: {
+    backgroundColor: "#2563eb",
+    padding: 10,
     borderRadius: 8,
     alignItems: "center",
-    marginBottom: 10,
   },
+  translateText: { color: "#fff", fontWeight: "600" },
   speakButton: {
     backgroundColor: "#10b981",
-    padding: 12,
+    padding: 10,
     borderRadius: 8,
     alignItems: "center",
+    marginBottom: 8, // space before translate button
+  },
+  speakText: { color: "#fff", fontWeight: "600" },
+  status: { color: "#a7f3d0", marginTop: 6, textAlign: "center" },
+  outputBox: {
+    backgroundColor: "#334155",
+    borderRadius: 8,
+    padding: 10,
+    minHeight: 60,
     marginBottom: 10,
   },
-  buttonText: { color: "#fff", fontWeight: "600" },
-  outputBox: { backgroundColor: "#fff", borderRadius: 8, padding: 12, minHeight: 100 },
-  outputText: { fontSize: 16 },
+  outputText: { color: "#fff" },
+  swapCircle: {
+    backgroundColor: "#334155",
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: "center",
+    justifyContent: "center",
+    marginHorizontal: 8,
+    marginTop: 100,
+  },
+  swapText: { color: "#fff", fontSize: 18 },
+  conversationContainer: {
+    marginTop: 20,
+    backgroundColor: "#1e293b",
+    borderRadius: 12,
+    paddingVertical: 16,
+    paddingHorizontal: 0,
+  },
+  conversationTitle: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "600",
+    marginBottom: 8,
+  },
+  conversationBox: {
+    backgroundColor: "#0f172a",
+    borderRadius: 8,
+    minHeight: 120,
+    justifyContent: "center",
+    alignItems: "stretch", // allow children to stretch horizontally so alignSelf works
+    paddingVertical: 10,
+    paddingHorizontal: 0,
+  },
+  placeholderText: { color: "#94a3b8", textAlign: "center" },
+  conversationSpeaker: { color: "#cbd5e1", fontWeight: "700" },
+  conversationEntry: { color: "#fff" },
+  conversationBubble: {
+    borderWidth: 1,
+    padding: 8,
+    borderRadius: 8,
+  },
+  bottomButtons: {
+    flexDirection: "row",
+    justifyContent: "space-around",
+    marginTop: 12,
+  },
+  swapButton: {
+    backgroundColor: "#334155",
+    padding: 10,
+    borderRadius: 8,
+    flex: 1,
+    marginRight: 8,
+    alignItems: "center",
+  },
+  copyButton: {
+    backgroundColor: "#334155",
+    padding: 10,
+    borderRadius: 8,
+    flex: 1,
+    marginLeft: 8,
+    alignItems: "center",
+  },
+  bottomButtonText: { color: "#fff", fontWeight: "600" },
 });
