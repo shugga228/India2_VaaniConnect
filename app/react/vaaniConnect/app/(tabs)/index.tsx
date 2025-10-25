@@ -171,7 +171,7 @@ export default function App() {
               )}
             </TouchableOpacity>
 
-            <Text style={styles.status}>Ready</Text>
+             
           </View>
 
           {/* Swap icon */}
@@ -227,7 +227,7 @@ export default function App() {
                 <Text style={styles.translateText}>Translate ▶</Text>
               )}
             </TouchableOpacity>
-            <Text style={styles.status}>Ready</Text>
+            
           </View>
         </View>
 
@@ -265,7 +265,7 @@ export default function App() {
               <Text style={styles.bottomButtonText}>⇄ Swap</Text>
             </TouchableOpacity>
             <TouchableOpacity style={styles.copyButton} onPress={handleCopyConversation}>
-              <Text style={styles.bottomButtonText}>Copy</Text>
+              <Text style={styles.bottomButtonText}>Copy ⎘</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -277,8 +277,8 @@ export default function App() {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#0f172a" },
   header: {
-    backgroundColor: "#0c4a6e",
-    padding: 16,
+    backgroundColor: "#4002e9",
+    padding: 10,
     alignItems: "center",
   },
   headerText: { color: "#fff", fontSize: 20, fontWeight: "700" },
@@ -328,7 +328,7 @@ const styles = StyleSheet.create({
   },
   translateText: { color: "#fff", fontWeight: "600" },
   speakButton: {
-    backgroundColor: "#10b981",
+    backgroundColor: "#4002e9",
     padding: 10,
     borderRadius: 8,
     alignItems: "center",
