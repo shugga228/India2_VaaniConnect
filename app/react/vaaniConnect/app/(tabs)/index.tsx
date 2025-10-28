@@ -15,7 +15,6 @@ import {
 import { Picker } from "@react-native-picker/picker";
 import * as Speech from "expo-speech";
 import * as Clipboard from "expo-clipboard";
-// Removed dynamic require and directly imported Clipboard
 
 type LanguageOption = {
   label: string;
@@ -34,12 +33,22 @@ const LANGUAGE_OPTIONS: LanguageOption[] = [
 export default function App() {
   const [sourceLang, setSourceLang] = useState("en");
   const [targetLang, setTargetLang] = useState("hi");
-  // Separate inputs for each speaker
   const [speaker1Text, setSpeaker1Text] = useState("");
   const [speaker2Text, setSpeaker2Text] = useState("");
-  // Conversation history: array of { speaker, text }
-  const [conversation, setConversation] = useState<Array<{ speaker: string; text: string }>>([]);
+  const [conversation, setConversation] = useState<
+    Array<{ speaker: string; text: string }>
+  >([]);
   const [loading, setLoading] = useState(false);
+
+  const translateText = async (text: string, from: string, to: string) => {
+    const response = await fetch(
+      `https://translate.googleapis.com/translate_a/single?client=gtx&sl=${from}&tl=${to}&dt=t&q=${encodeURIComponent(
+        text
+      )}`
+    );
+    const data = await response.json();
+    return data[0][0][0];
+  };
 
   const handleTranslateSpeaker1 = async () => {
     if (!speaker1Text.trim()) {
@@ -48,9 +57,11 @@ export default function App() {
     }
     setLoading(true);
     try {
-      // Placeholder translation from speaker1's language to speaker2's language
-      const translated = `(translation of "${speaker1Text}" to ${targetLang})`;
-      setConversation((prev) => [...prev, { speaker: "Speaker 1", text: translated }]);
+      const translated = await translateText(speaker1Text, sourceLang, targetLang);
+      setConversation((prev) => [
+        ...prev,
+        { speaker: "Speaker 1", text: translated },
+      ]);
     } catch (err: any) {
       Alert.alert("Translation error", err.message);
     } finally {
@@ -65,9 +76,11 @@ export default function App() {
     }
     setLoading(true);
     try {
-      // Placeholder translation from speaker2's language to speaker1's language
-      const translated = `(translation of "${speaker2Text}" to ${sourceLang})`;
-      setConversation((prev) => [...prev, { speaker: "Speaker 2", text: translated }]);
+      const translated = await translateText(speaker2Text, targetLang, sourceLang);
+      setConversation((prev) => [
+        ...prev,
+        { speaker: "Speaker 2", text: translated },
+      ]);
     } catch (err: any) {
       Alert.alert("Translation error", err.message);
     } finally {
@@ -93,15 +106,7 @@ export default function App() {
     }
     const text = conversation.map((c) => `${c.speaker}: ${c.text}`).join("\n\n");
     try {
-      if (Clipboard && (Clipboard as any).setStringAsync) {
-        await (Clipboard as any).setStringAsync(text);
-      } else if ((global as any).navigator && (global as any).navigator.clipboard && (global as any).navigator.clipboard.writeText) {
-        await (global as any).navigator.clipboard.writeText(text);
-      } else if ((global as any).Clipboard && (global as any).Clipboard.setString) {
-        (global as any).Clipboard.setString(text);
-      } else {
-        throw new Error("No clipboard available");
-      }
+      await Clipboard.setStringAsync(text);
       Alert.alert("Copied conversation to clipboard");
     } catch (err: any) {
       Alert.alert("Copy failed", err.message || String(err));
@@ -142,6 +147,7 @@ export default function App() {
                 ))}
               </Picker>
             </View>
+
             <TextInput
               style={styles.input}
               placeholder="Type message..."
@@ -151,7 +157,6 @@ export default function App() {
               multiline
             />
 
-            {/* Speak button (moved above translate) */}
             <TouchableOpacity
               style={styles.speakButton}
               onPress={() => speak(speaker1Text, sourceLang)}
@@ -159,7 +164,6 @@ export default function App() {
               <Text style={styles.speakText}>Speak ▶</Text>
             </TouchableOpacity>
 
-            {/* Translate button */}
             <TouchableOpacity
               style={styles.translateButton}
               onPress={handleTranslateSpeaker1}
@@ -170,8 +174,6 @@ export default function App() {
                 <Text style={styles.translateText}>Translate ▶</Text>
               )}
             </TouchableOpacity>
-
-             
           </View>
 
           {/* Swap icon */}
@@ -200,6 +202,7 @@ export default function App() {
                 ))}
               </Picker>
             </View>
+
             <TextInput
               style={styles.input}
               placeholder="Type message..."
@@ -216,7 +219,6 @@ export default function App() {
               <Text style={styles.speakText}>Speak ▶</Text>
             </TouchableOpacity>
 
-            {/* Translate button for Speaker 2 */}
             <TouchableOpacity
               style={styles.translateButton}
               onPress={handleTranslateSpeaker2}
@@ -227,7 +229,6 @@ export default function App() {
                 <Text style={styles.translateText}>Translate ▶</Text>
               )}
             </TouchableOpacity>
-            
           </View>
         </View>
 
@@ -243,16 +244,18 @@ export default function App() {
               conversation.map((c, i) => {
                 const isSpeaker1 = c.speaker === "Speaker 1";
                 const color = isSpeaker1 ? "#3b82f6" : "#f59e0b";
-                const bubbleBg = isSpeaker1 ? "#3b82f633" : "#f59e0b33"; // translucent
+                const bubbleBg = isSpeaker1 ? "#3b82f633" : "#f59e0b33";
                 return (
-                  <View
-                    key={i}
-                    style={{ marginBottom: 8, alignSelf: "flex-end", width: "100%" }}
-                  >
+                  <View key={i} style={{ marginBottom: 8 }}>
                     <Text style={[styles.conversationSpeaker, { color }]}>
                       {c.speaker}:
                     </Text>
-                    <View style={[styles.conversationBubble, { backgroundColor: bubbleBg, borderColor: color }]}> 
+                    <View
+                      style={[
+                        styles.conversationBubble,
+                        { backgroundColor: bubbleBg, borderColor: color },
+                      ]}
+                    >
                       <Text style={styles.conversationEntry}>{c.text}</Text>
                     </View>
                   </View>
@@ -260,11 +263,15 @@ export default function App() {
               })
             )}
           </View>
+
           <View style={styles.bottomButtons}>
             <TouchableOpacity style={styles.swapButton} onPress={handleSwap}>
               <Text style={styles.bottomButtonText}>⇄ Swap</Text>
             </TouchableOpacity>
-            <TouchableOpacity style={styles.copyButton} onPress={handleCopyConversation}>
+            <TouchableOpacity
+              style={styles.copyButton}
+              onPress={handleCopyConversation}
+            >
               <Text style={styles.bottomButtonText}>Copy ⎘</Text>
             </TouchableOpacity>
           </View>
@@ -308,9 +315,7 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     marginBottom: 12,
   },
-  picker: {
-    color: "#fff",
-  },
+  picker: { color: "#fff" },
   input: {
     backgroundColor: "#334155",
     color: "#fff",
@@ -332,18 +337,9 @@ const styles = StyleSheet.create({
     padding: 10,
     borderRadius: 8,
     alignItems: "center",
-    marginBottom: 8, // space before translate button
+    marginBottom: 8,
   },
   speakText: { color: "#fff", fontWeight: "600" },
-  status: { color: "#a7f3d0", marginTop: 6, textAlign: "center" },
-  outputBox: {
-    backgroundColor: "#334155",
-    borderRadius: 8,
-    padding: 10,
-    minHeight: 60,
-    marginBottom: 10,
-  },
-  outputText: { color: "#fff" },
   swapCircle: {
     backgroundColor: "#334155",
     width: 40,
@@ -359,8 +355,7 @@ const styles = StyleSheet.create({
     marginTop: 20,
     backgroundColor: "#1e293b",
     borderRadius: 12,
-    paddingVertical: 16,
-    paddingHorizontal: 0,
+    padding: 16,
   },
   conversationTitle: {
     color: "#fff",
@@ -373,12 +368,10 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     minHeight: 120,
     justifyContent: "center",
-    alignItems: "stretch", // allow children to stretch horizontally so alignSelf works
-    paddingVertical: 10,
-    paddingHorizontal: 0,
+    padding: 10,
   },
   placeholderText: { color: "#94a3b8", textAlign: "center" },
-  conversationSpeaker: { color: "#cbd5e1", fontWeight: "700" },
+  conversationSpeaker: { fontWeight: "700" },
   conversationEntry: { color: "#fff" },
   conversationBubble: {
     borderWidth: 1,
