@@ -1,4 +1,7 @@
-import React, { useState } from "react";
+import * as Speech from "expo-speech";
+import React, { useState, useRef } from "react";
+import { Ionicons } from "@expo/vector-icons";
+
 import {
   SafeAreaView,
   View,
@@ -13,7 +16,6 @@ import {
   Platform,
 } from "react-native";
 import { Picker } from "@react-native-picker/picker";
-import * as Speech from "expo-speech";
 import * as Clipboard from "expo-clipboard";
 
 type LanguageOption = {
@@ -23,11 +25,11 @@ type LanguageOption = {
 
 const LANGUAGE_OPTIONS: LanguageOption[] = [
   { label: "English", code: "en" },
-  { label: "Hindi", code: "hi" },
-  { label: "Telugu", code: "te" },
-  { label: "Tamil", code: "ta" },
-  { label: "Kannada", code: "kn" },
-  { label: "Malayalam", code: "ml" },
+  { label: "हिन्दी (Hindi)", code: "hi" },
+  { label: "తెలుగు (Telugu)", code: "te" },
+  { label: "தமிழ் (Tamil)", code: "ta" },
+  { label: "ಕನ್ನಡ (Kannada)", code: "kn" },
+  { label: "മലയാളം (Malayalam)", code: "ml" },
 ];
 
 export default function App() {
@@ -48,6 +50,65 @@ export default function App() {
     );
     const data = await response.json();
     return data[0][0][0];
+  };
+
+  // Speech recognition state
+  const recognitionRef = useRef<any>(null);
+  const [isListening, setIsListening] = useState(false);
+
+  const recordSpeechToText = async (
+    setText: (t: string) => void,
+    lang: string
+  ) => {
+    if (Platform.OS !== "web") {
+      Alert.alert("Speech recognition is only available on web in this build");
+      return;
+    }
+
+    const SpeechRecognition =
+      (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+    if (!SpeechRecognition) {
+      Alert.alert("Speech recognition not supported in this browser");
+      return;
+    }
+
+    // If already listening, stop it
+    if (isListening && recognitionRef.current) {
+      recognitionRef.current.stop();
+      return;
+    }
+
+    const recognition = new SpeechRecognition();
+    recognition.lang = lang;
+    recognition.interimResults = true;
+    recognition.continuous = false;
+
+    recognition.onresult = (event: any) => {
+      const transcript = Array.from(event.results)
+        .map((result: any) => result[0].transcript)
+        .join("");
+      setText(transcript);
+    };
+
+    recognition.onerror = (event: any) => {
+      console.error("Speech recognition error", event);
+      Alert.alert("Speech recognition error", event.error);
+      setIsListening(false);
+    };
+
+    recognition.onend = () => {
+      setIsListening(false);
+      recognitionRef.current = null;
+    };
+
+    try {
+      recognition.start();
+      recognitionRef.current = recognition;
+      setIsListening(true);
+    } catch (error: any) {
+      console.error("Speech recognition failed to start:", error);
+      Alert.alert("Speech recognition failed", error.message || String(error));
+    }
   };
 
   const handleTranslateSpeaker1 = async () => {
@@ -113,6 +174,22 @@ export default function App() {
     }
   };
 
+  // 🧹 NEW: Clear conversation
+  const handleClearConversation = () => {
+    if (conversation.length === 0) {
+      Alert.alert("Conversation is already empty");
+      return;
+    }
+    Alert.alert("Clear Conversation", "Are you sure you want to clear it?", [
+      { text: "Cancel", style: "cancel" },
+      {
+        text: "Clear",
+        style: "destructive",
+        onPress: () => setConversation([]),
+      },
+    ]);
+  };
+
   return (
     <SafeAreaView
       style={[
@@ -130,6 +207,7 @@ export default function App() {
           <View style={[styles.speakerCard, { borderColor: "#3b82f6" }]}>
             <Text style={styles.speakerTitle}>Speaker 1</Text>
             <Text style={styles.label}>Language</Text>
+
             <View style={styles.pickerWrapper}>
               <Picker
                 selectedValue={sourceLang}
@@ -158,10 +236,20 @@ export default function App() {
             />
 
             <TouchableOpacity
-              style={styles.speakButton}
-              onPress={() => speak(speaker1Text, sourceLang)}
+              style={[styles.speakButton, isListening && { backgroundColor: "#2d0ba9" }]}
+              onPress={() => recordSpeechToText(setSpeaker1Text, sourceLang)}
             >
-              <Text style={styles.speakText}>Speak ▶</Text>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Ionicons
+                  name={isListening ? "mic" : "mic-outline"}
+                  size={18}
+                  color="#fff"
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={styles.speakText}>
+                  {isListening ? "Listening..." : "Speak"}
+                </Text>
+              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -171,7 +259,7 @@ export default function App() {
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.translateText}>Translate ▶</Text>
+                <Text style={styles.translateText}>▶ Translate</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -185,6 +273,7 @@ export default function App() {
           <View style={[styles.speakerCard, { borderColor: "#f59e0b" }]}>
             <Text style={styles.speakerTitle}>Speaker 2</Text>
             <Text style={styles.label}>Language</Text>
+
             <View style={styles.pickerWrapper}>
               <Picker
                 selectedValue={targetLang}
@@ -213,10 +302,20 @@ export default function App() {
             />
 
             <TouchableOpacity
-              style={styles.speakButton}
-              onPress={() => speak(speaker2Text, targetLang)}
+              style={[styles.speakButton, isListening && { backgroundColor: "#2d0ba9" }]}
+              onPress={() => recordSpeechToText(setSpeaker2Text, targetLang)}
             >
-              <Text style={styles.speakText}>Speak ▶</Text>
+              <View style={{ flexDirection: "row", alignItems: "center" }}>
+                <Ionicons
+                  name={isListening ? "mic" : "mic-outline"}
+                  size={18}
+                  color="#fff"
+                  style={{ marginRight: 6 }}
+                />
+                <Text style={styles.speakText}>
+                  {isListening ? "Listening..." : "Speak"}
+                </Text>
+              </View>
             </TouchableOpacity>
 
             <TouchableOpacity
@@ -226,7 +325,7 @@ export default function App() {
               {loading ? (
                 <ActivityIndicator color="#fff" />
               ) : (
-                <Text style={styles.translateText}>Translate ▶</Text>
+                <Text style={styles.translateText}>▶ Translate</Text>
               )}
             </TouchableOpacity>
           </View>
@@ -256,7 +355,18 @@ export default function App() {
                         { backgroundColor: bubbleBg, borderColor: color },
                       ]}
                     >
-                      <Text style={styles.conversationEntry}>{c.text}</Text>
+                      <TouchableOpacity
+                        onPress={() =>
+                          Speech.speak(c.text, {
+                            language:
+                              c.speaker === "Speaker 1"
+                                ? sourceLang
+                                : targetLang,
+                          })
+                        }
+                      >
+                        <Text style={styles.conversationEntry}>{c.text}</Text>
+                      </TouchableOpacity>
                     </View>
                   </View>
                 );
@@ -264,15 +374,24 @@ export default function App() {
             )}
           </View>
 
+          {/* Bottom Buttons */}
           <View style={styles.bottomButtons}>
-            <TouchableOpacity style={styles.swapButton} onPress={handleSwap}>
-              <Text style={styles.bottomButtonText}>⇄ Swap</Text>
+            {/* 🗑 Clear Button */}
+            <TouchableOpacity
+              style={styles.clearButton}
+              onPress={handleClearConversation}
+            >
+              <Ionicons name="trash-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.bottomButtonText}>Clear</Text>
             </TouchableOpacity>
+
+            {/* 📋 Copy Button */}
             <TouchableOpacity
               style={styles.copyButton}
               onPress={handleCopyConversation}
             >
-              <Text style={styles.bottomButtonText}>Copy ⎘</Text>
+              <Ionicons name="copy-outline" size={18} color="#fff" style={{ marginRight: 6 }} />
+              <Text style={styles.bottomButtonText}>Copy</Text>
             </TouchableOpacity>
           </View>
         </View>
@@ -383,21 +502,25 @@ const styles = StyleSheet.create({
     justifyContent: "space-around",
     marginTop: 12,
   },
-  swapButton: {
-    backgroundColor: "#334155",
+  clearButton: {
+    backgroundColor: "#ef4444",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 10,
     borderRadius: 8,
     flex: 1,
     marginRight: 8,
-    alignItems: "center",
   },
   copyButton: {
     backgroundColor: "#334155",
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
     padding: 10,
     borderRadius: 8,
     flex: 1,
     marginLeft: 8,
-    alignItems: "center",
   },
   bottomButtonText: { color: "#fff", fontWeight: "600" },
 });
